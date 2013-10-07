@@ -61,6 +61,7 @@ class LanguagePack::Ruby < LanguagePack::Base
         "LANG"     => "en_US.UTF-8",
         "PATH"     => default_path,
         "GEM_PATH" => slug_vendor_base,
+      "LD_LIBRARY_PATH" => "vendor/freetds/lib:$LD_LIBRARY_PATH"
       }
 
       ruby_version_jruby? ? vars.merge({
@@ -105,6 +106,7 @@ private
   # @return [String] the resulting PATH
   def default_path
     "bin:#{bundler_binstubs_path}:/usr/local/bin:/usr/bin:/bin"
+    "$HOME/vendor/freetds/bin:bin:#{slug_vendor_base}/bin:/usr/local/bin:/usr/bin:/bin"
   end
 
   # the relative path to the bundler directory of gems
@@ -148,6 +150,7 @@ private
       @ruby_version_run     = true
       @ruby_version_set     = false
 
+    bootstrap_bundler do |bundler_path|
       old_system_path = "/usr/local/bin:/usr/local/sbin:/usr/bin:/bin:/usr/sbin:/sbin"
       @ruby_version = run_stdout("env PATH=#{bundler_path}/bin:#{old_system_path} GEM_PATH=#{bundler_path} bundle platform --ruby").chomp
 
@@ -166,6 +169,17 @@ private
     end
 
     @ruby_version
+  end
+
+  # bootstraps bundler so we can pull the ruby version
+  def bootstrap_bundler(&block)
+    Dir.mktmpdir("bundler-") do |tmpdir|
+      Dir.chdir(tmpdir) do
+        run("curl #{VENDOR_URL}/#{BUNDLER_GEM_PATH}.tgz -s -o - | tar xzf -")
+      end
+
+      yield tmpdir
+    end
   end
 
   # determine if we're using rbx
@@ -234,6 +248,7 @@ private
       set_env_override "GEM_PATH", "$HOME/#{slug_vendor_base}:$GEM_PATH"
       set_env_default  "LANG",     "en_US.UTF-8"
       set_env_override "PATH",     "$HOME/bin:$HOME/#{slug_vendor_base}/bin:$HOME/#{bundler_binstubs_path}:$PATH"
+      set_env_override "LD_LIBRARY_PATH", "vendor/freetds/lib:$LD_LIBRARY_PATH"
 
       if ruby_version_jruby?
         set_env_default "JAVA_OPTS", default_java_opts
@@ -502,6 +517,13 @@ WARNING
           libyaml_dir = "#{tmpdir}/#{LIBYAML_PATH}"
           install_libyaml(libyaml_dir)
 
+        # freetds_dir = "#{tmpdir}/freetds"
+        # `mkdir -p #{tmpdir}/freetds`
+ 
+        # `curl https://s3.amazonaws.com/firmhouse/freetds-0.tgz -o - | tar -xz -C #{tmpdir}/freetds -f -`
+ 
+        # freetds_include = File.expand_path("#{freetds_dir}/include")
+        # freetds_lib = File.expand_path("#{freetds_dir}/lib")
           # need to setup compile environment for the psych gem
           yaml_include   = File.expand_path("#{libyaml_dir}/include")
           yaml_lib       = File.expand_path("#{libyaml_dir}/lib")
